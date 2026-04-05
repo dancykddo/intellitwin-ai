@@ -20,6 +20,11 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(bytes);
 
     const fileName = `${uuidv4()}-${file.name}`;
+    
+    if (!bucket) {
+      return NextResponse.json({ error: 'Firebase Storage is not configured' }, { status: 500 });
+    }
+
     const fileRef = bucket.file(`uploads/${fileName}`);
 
     await fileRef.save(buffer, {
