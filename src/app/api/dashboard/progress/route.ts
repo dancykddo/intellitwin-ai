@@ -1,27 +1,25 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET() {
   try {
-    // In a real app we'd query by date range. 
-    // Here we'll simulate weekly data by counting tasks completed on each day if possible, 
-    // but since we only have created_at/completed, we'll map them to the last 7 days.
-    
-    // For the demo, we'll return a mix of real completion counts and some base values 
-    // to make the chart look nice.
-    const results: any = await query(`
-      SELECT DAYNAME(created_at) as day, COUNT(*) as completed 
-      FROM tasks 
-      WHERE completed = 1 
-      GROUP BY DAYNAME(created_at)
-    `);
+    // Fetch all completed tasks and group by weekday in JS (PostgreSQL compatible)
+    const { data: tasks, error } = await supabase
+      .from('tasks')
+      .select('created_at')
+      .eq('completed', true);
+
+    if (error) throw error;
 
     const daysMap: Record<string, number> = {
-      'Monday': 0, 'Tuesday': 0, 'Wednesday': 0, 'Thursday': 0, 'Friday': 0, 'Saturday': 0, 'Sunday': 0
+      Monday: 0, Tuesday: 0, Wednesday: 0,
+      Thursday: 0, Friday: 0, Saturday: 0, Sunday: 0,
     };
 
-    results.forEach((r: any) => {
-      daysMap[r.day] = r.completed;
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    (tasks || []).forEach((t: any) => {
+      const dayName = dayNames[new Date(t.created_at).getDay()];
+      if (dayName) daysMap[dayName]++;
     });
 
     const chartData = [
@@ -36,7 +34,7 @@ export async function GET() {
 
     return NextResponse.json(chartData);
   } catch (error: any) {
-    console.error("Database error in progress GET:", error.message || error);
-    return NextResponse.json({ error: "Failed to fetch progress data", details: error.message }, { status: 500 });
+    console.error('Progress GET Error:', error.message);
+    return NextResponse.json({ error: 'Failed to fetch progress data' }, { status: 500 });
   }
 }

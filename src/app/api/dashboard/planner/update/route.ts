@@ -1,18 +1,23 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
     const { id, completed } = await request.json();
-    
-    await query(
-      'UPDATE tasks SET completed = ?, category = ? WHERE id = ?',
-      [completed, completed ? 'Completed' : 'Today', id]
-    );
+
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        completed: Boolean(completed),
+        category: completed ? 'Completed' : 'Today',
+      })
+      .eq('id', id);
+
+    if (error) throw error;
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Database error in planner update API:", error);
-    return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
+  } catch (error: any) {
+    console.error('Planner Update Error:', error.message);
+    return NextResponse.json({ error: 'Failed to update task' }, { status: 500 });
   }
 }

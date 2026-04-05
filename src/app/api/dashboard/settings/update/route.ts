@@ -1,33 +1,36 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
-// This is an alias endpoint that forwards to the main settings POST
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { profile, notifications, ai, appearance } = body;
-
+    const { profile, notifications, ai, appearance } = await request.json();
     const { difficultyLevel, focusSubjects, ...aiRest } = ai || {};
     const { theme, accentColor, ...appearanceRest } = appearance || {};
 
-    await query(
-      `UPDATE settings SET 
-        name = ?, email = ?, study_goal = ?, daily_hours = ?, learning_pace = ?, 
-        difficulty_level = ?, focus_subjects = ?, 
-        theme = ?, accent_color = ?,
-        notifications_json = ?, ai_json = ?, appearance_json = ?
-      WHERE id = 1`,
-      [
-        profile?.name, profile?.email, profile?.studyGoal, profile?.dailyHours, profile?.learningPace,
-        difficultyLevel, JSON.stringify(focusSubjects || []), 
-        theme, accentColor,
-        JSON.stringify(notifications || {}), JSON.stringify(aiRest || {}), JSON.stringify(appearanceRest || {})
-      ]
-    );
+    const { error } = await supabase
+      .from('settings')
+      .upsert({
+        id: 1,
+        name: profile?.name,
+        email: profile?.email,
+        study_goal: profile?.studyGoal,
+        daily_hours: profile?.dailyHours,
+        learning_pace: profile?.learningPace,
+        difficulty_level: difficultyLevel,
+        focus_subjects: focusSubjects || [],
+        theme,
+        accent_color: accentColor,
+        notifications_json: notifications || {},
+        ai_json: aiRest || {},
+        appearance_json: appearanceRest || {},
+        last_active: new Date().toISOString(),
+      });
+
+    if (error) throw error;
 
     return NextResponse.json({ success: true, timestamp: new Date().toISOString() });
   } catch (error: any) {
-    console.error("Database error in settings update:", error.message || error);
-    return NextResponse.json({ error: "Failed to save settings", details: error.message }, { status: 500 });
+    console.error('Settings update Error:', error.message);
+    return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
   }
 }

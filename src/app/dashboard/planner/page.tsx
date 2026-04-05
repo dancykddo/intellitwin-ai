@@ -6,6 +6,7 @@ import {
   CheckCircle2, Loader2, AlertCircle, TrendingUp, Target, Zap, Brain, X,
   BookOpen, ListChecks, HelpCircle, BarChart3, FileText,
 } from 'lucide-react';
+import { getSupabasePublic } from '@/lib/supabase';
 
 interface Task {
   id: string;
@@ -73,8 +74,22 @@ export default function StudyPlanner() {
 
   useEffect(() => {
     fetchPlannerData();
-    const interval = setInterval(fetchPlannerData, 5000);
-    return () => clearInterval(interval);
+
+    // ── Supabase Realtime Subscription ──────────────────────────────────────
+    const supabase = getSupabasePublic();
+    const taskChannel = supabase
+      .channel('planner_changes')
+      .on('postgres_changes', { event: '*', table: 'tasks', schema: 'public' }, () => {
+        fetchPlannerData(); // Refresh aggregated data on any task change
+      })
+      .on('postgres_changes', { event: '*', table: 'files', schema: 'public' }, () => {
+        fetchPlannerData(); // Refresh if AI analysis completes on a file
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(taskChannel);
+    };
   }, []);
 
   const handleTaskComplete = async (taskId: string) => {

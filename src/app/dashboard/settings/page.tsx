@@ -6,6 +6,7 @@ import {
   Loader2, ChevronRight, Zap, Clock,
   BookOpen, Target, Sliders, RefreshCw, Download, Trash2, Camera
 } from 'lucide-react';
+import { getSupabasePublic } from '@/lib/supabase';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -154,8 +155,19 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchSettings();
-    const interval = setInterval(fetchSettings, 5000); // Poll every 5 seconds
-    return () => clearInterval(interval);
+
+    // ── Supabase Realtime Subscription ──────────────────────────────────────
+    const supabase = getSupabasePublic();
+    const settingsChannel = supabase
+      .channel('settings_changes')
+      .on('postgres_changes', { event: '*', table: 'settings', schema: 'public' }, () => {
+        fetchSettings(); // Refresh settings UI on any change
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(settingsChannel);
+    };
   }, [fetchSettings]);
 
   // ── Instant Theme Engine ──────────────────────────────────────────────

@@ -1,50 +1,49 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import admin from '@/lib/firebase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function GET() {
-  const healthResults: any = {
+  const health: any = {
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    services: {
-      database: 'unknown',
-      storage: 'unknown',
-      ai: 'unknown',
-    },
+    services: { database: 'unknown', storage: 'unknown', ai: 'unknown' },
   };
 
+  // 1. Check Supabase database
   try {
-    // 1. Check Database
-    await query('SELECT 1');
-    healthResults.services.database = 'connected';
-  } catch (dbError: any) {
-    healthResults.status = 'unhealthy';
-    healthResults.services.database = `error: ${dbError.message}`;
+    const { error } = await supabase.from('settings').select('id').limit(1);
+    if (error) throw error;
+    health.services.database = 'connected';
+  } catch (e: any) {
+    health.status = 'unhealthy';
+    health.services.database = `error: ${e.message}`;
   }
 
+  // 2. Check Firebase storage
   try {
-    // 2. Check Storage (Firebase Admin)
-    const bucket = admin.storage().bucket();
-    const [exists] = await bucket.exists();
-    healthResults.services.storage = exists ? 'connected' : 'bucket not found';
-  } catch (storageError: any) {
-    healthResults.status = 'unhealthy';
-    healthResults.services.storage = `error: ${storageError.message}`;
+    if (admin.apps.length) {
+      const bucket = admin.storage().bucket();
+      const [exists] = await bucket.exists();
+      health.services.storage = exists ? 'connected' : 'bucket not found';
+    } else {
+      health.services.storage = 'not configured';
+    }
+  } catch (e: any) {
+    health.status = 'unhealthy';
+    health.services.storage = `error: ${e.message}`;
   }
 
+  // 3. Check Gemini AI
   try {
-    // 3. Check AI (Gemini)
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    // Simple prompt to test connectivity (don't over-bill)
-    await model.generateContent("ping");
-    healthResults.services.ai = 'connected';
-  } catch (aiError: any) {
-    healthResults.status = 'unhealthy';
-    healthResults.services.ai = `error: ${aiError.message}`;
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    await model.generateContent('ping');
+    health.services.ai = 'connected';
+  } catch (e: any) {
+    health.status = 'unhealthy';
+    health.services.ai = `error: ${e.message}`;
   }
 
-  const statusCode = healthResults.status === 'healthy' ? 200 : 503;
-  return NextResponse.json(healthResults, { status: statusCode });
+  return NextResponse.json(health, { status: health.status === 'healthy' ? 200 : 503 });
 }

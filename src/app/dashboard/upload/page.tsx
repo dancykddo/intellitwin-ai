@@ -6,6 +6,7 @@ import {
   Search, Filter, Eye, MoreVertical, Trash2, Clock, HardDrive, FilePlus, 
   Loader2, AlertCircle, Calendar, Download, ExternalLink, Zap, Target, BookOpen, Layers
 } from 'lucide-react';
+import { getSupabasePublic } from '@/lib/supabase';
 
 interface AnalysisData {
   summary: string;
@@ -89,8 +90,19 @@ export default function UploadPage() {
 
   useEffect(() => {
     fetchMetadata();
-    const interval = setInterval(fetchMetadata, 5000); // Poll every 5 seconds
-    return () => clearInterval(interval);
+
+    // ── Supabase Realtime Subscription ──────────────────────────────────────
+    const supabase = getSupabasePublic();
+    const fileChannel = supabase
+      .channel('upload_changes')
+      .on('postgres_changes', { event: '*', table: 'files', schema: 'public' }, () => {
+        fetchMetadata(); // Refresh the list when any file record changes
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(fileChannel);
+    };
   }, []);
 
   const handleDrag = (e: React.DragEvent) => {

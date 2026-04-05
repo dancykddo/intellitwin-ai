@@ -16,3 +16,6 @@ eslint.json
 build_err*.txt
 eslint_*.txt
 tsc*.txt
+
+.vercel
+.env*.local
