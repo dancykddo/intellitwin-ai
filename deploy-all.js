@@ -41,9 +41,9 @@ const main = async () => {
   console.log("\x1b[32mAction Required: If prompted, please complete the browser-based OAuth login.\x1b[0m");
   try {
      run("npx -y gh auth login --web");
-     run("npx -y gh repo create intellitwin --public --source=. --remote=origin --push");
+     run("npx -y gh repo create intellitwin-prod --public --source=. --remote=origin --push");
   } catch (e) {
-     console.log("GitHub repository might already exist or push failed. Continuing...");
+     console.log("GitHub repository setup encountered an issue. Please verify on GitHub.com.");
   }
 
   // 3. Railway Database Provisioning
@@ -51,10 +51,12 @@ const main = async () => {
   console.log("\x1b[32mAction Required: If prompted, please login to Railway and confirm project creation.\x1b[0m");
   try {
     run("npx -y @railway/cli login");
-    // Attempting to create project non-interactively if possible, or guiding the user
     console.log("Initializing new Railway project...");
+    // Create project and add MySQL service
     run("npx -y @railway/cli init"); 
-    run("npx -y @railway/cli add MySQL");
+    console.log("Adding MySQL service to Railway project...");
+    // The 'add' command often requires interaction, sending 'mysql' as fallback
+    run("npx -y @railway/cli add mysql");
   } catch (e) {
     console.log("Railway setup partially failed or already exists. Continuing...");
   }
