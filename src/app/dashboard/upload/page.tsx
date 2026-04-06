@@ -91,6 +91,26 @@ export default function UploadPage() {
         fetchMetadata(); 
       })
       .subscribe();
+      
+    // Auto-delete fundamentally broken uploads
+    const clearFailed = async () => {
+      // Small delay ensures state is populated
+      setTimeout(async () => {
+        setFiles(currentFiles => {
+          const failed = currentFiles.filter(f => f.status === "Failed");
+          failed.forEach(async (file) => {
+            await fetch('/api/uploads', {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: file.id })
+            }).catch(() => null);
+          });
+          return currentFiles.filter(f => f.status !== "Failed");
+        });
+      }, 5000); // Clean silently
+    }
+    clearFailed();
+      
     return () => { supabase.removeChannel(fileChannel); };
   }, []);
 
@@ -148,11 +168,24 @@ export default function UploadPage() {
       file_url: '',
       created_at: new Date().toISOString(),
       status: 'Uploading',
-      progress: 20,
+      progress: 30,
       size: (file.size / 1024 / 1024).toFixed(2) + ' MB'
     };
 
+    // Clear duplicate uploads preemptively
+    setFiles(prev => prev.filter(f => f.file_name !== file.name));
     setFiles(prev => [newFile, ...prev]);
+
+    // Add Upload Timeout Protection
+    const timeout = setTimeout(() => {
+      setFiles(prev => 
+        prev.map(f =>
+          f.id === tempId
+            ? { ...f, status: "Failed", summary: "Upload Timeout: The pipeline took too long to respond." }
+            : f
+        )
+      );
+    }, 20000);
 
     try {
       // 1. Secure Server-Side Upload (Storage + Metadata in one atomic request)
@@ -186,6 +219,8 @@ export default function UploadPage() {
 
       // 2. Trigger Stable AI Analysis
       await handleAnalyze(fileUrl, dbId, tempId);
+
+      clearTimeout(timeout);
 
     } catch (err: any) {
       console.error("[Upload Pipeline Error]", err);
@@ -239,6 +274,15 @@ export default function UploadPage() {
           <p className="text-gray-400 mt-2 font-medium">Powering your IntelliTwin learning schedule with AI Analysis.</p>
         </div>
         <div className="flex items-center gap-3">
+          <button 
+            onClick={async () => {
+              await fetch('/api/uploads/clear', { method: "POST" });
+              setFiles([]);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl text-sm font-bold text-red-500 hover:bg-red-500/20 transition-all"
+          >
+            <Trash2 className="w-4 h-4"/> Clear All
+          </button>
           <button onClick={() => fetchMetadata()} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white hover:bg-white/10 transition-all">
              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`}/> {isSyncing ? 'Syncing...' : 'Sync Now'}
           </button>

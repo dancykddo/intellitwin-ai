@@ -131,6 +131,15 @@ export default function StudyPlanner() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchPlannerData]);
 
+  // Hard Reset Planner When Upload Changes
+  useEffect(() => {
+    if (!latestUpload) {
+      setPlannerTasks([]);
+      setModules([]);
+      setQna([]);
+    }
+  }, [latestUpload]);
+
   const handleTaskStatus = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === 'Completed' ? 'Pending' : 'Completed';
     setPlannerTasks(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
