@@ -107,16 +107,25 @@ export default function UploadPage() {
     
     try {
       console.log(`[Upload Dashboard] Dispatching Analysis for ID: ${dbId}`);
+      console.log("Running AI Analysis:", fileUrl);
       const aiRes = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileUrl, id: dbId })
       });
       if (!aiRes.ok) throw new Error(`Server returned HTTP ${aiRes.status}`);
-      const aiResult = await aiRes.json();
-      
+      const text = await aiRes.text();
+      console.log("AI RAW RESPONSE:", text);
+
+      let aiResult;
+      try {
+        aiResult = JSON.parse(text);
+      } catch {
+        throw new Error("AI returned invalid JSON");
+      }
+
       if (!aiResult.success) {
-        console.warn("Intelligence running in fallback mode");
+        throw new Error(aiResult.message || aiResult.error || "AI Analysis Failed");
       }
 
       const aiData = aiResult.data || {};
@@ -148,6 +157,7 @@ export default function UploadPage() {
     try {
       // 1. Secure Server-Side Upload (Storage + Metadata in one atomic request)
       console.log(`[Upload Dashboard] Starting Secure Pipeline for: ${file.name}`);
+      console.log("Uploading file:", file.name);
       const formData = new FormData();
       formData.append('file', file);
 
@@ -159,6 +169,11 @@ export default function UploadPage() {
       if (!uploadRes.ok) throw new Error(`Server returned HTTP ${uploadRes.status}`);
       const uploadResult = await uploadRes.json();
       if (!uploadResult.success) throw new Error(uploadResult.message || uploadResult.error || 'Server rejected the document stream.');
+
+      // Add Upload Pipeline Safety
+      if (!uploadResult?.data?.fileUrl) {
+        throw new Error("Upload succeeded but file URL missing");
+      }
 
       // Update UI state with official database values
       const { id: dbId, fileUrl } = uploadResult.data;
@@ -173,8 +188,19 @@ export default function UploadPage() {
       await handleAnalyze(fileUrl, dbId, tempId);
 
     } catch (err: any) {
-      console.error("[Upload Dashboard]: Pipeline Critical Breakdown", err);
-      setFiles(prev => prev.map(f => f.id === tempId ? { ...f, status: 'Failed', progress: 0, summary: `System Conflict: ${err.message}` } : f));
+      console.error("[Upload Pipeline Error]", err);
+      setFiles(prev =>
+        prev.map(f =>
+          f.id === tempId
+            ? {
+                ...f,
+                status: 'Failed',
+                progress: 0,
+                summary: err.message || "Upload Failed"
+              }
+            : f
+        )
+      );
     }
   };
 
@@ -291,7 +317,10 @@ export default function UploadPage() {
                 <div className="flex items-center gap-3">
                   {file.status === 'Failed' && (
                     <button 
-                      onClick={() => handleAnalyze(file.file_url, file.id)}
+                      onClick={() => {
+                        if (!file.file_url) return;
+                        handleAnalyze(file.file_url, file.id);
+                      }}
                       className="p-2.5 rounded-xl bg-white/5 text-gray-400 hover:text-[#00f2fe] hover:bg-white/10 transition-all"
                       title="Retry AI Analysis"
                     >

@@ -57,11 +57,19 @@ export default function StudyPlanner() {
   const [latestUpload, setLatestUpload] = useState<any>(null);
 
   const fetchPlannerData = useCallback(async () => {
+    console.log("Fetching Planner Data...");
     setIsSyncing(true);
     try {
       const res = await fetch('/api/planner/live');
       if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
-      const result = await res.json();
+      const result = await res.json().catch(() => null);
+
+      if (!result) {
+        console.warn("Planner API returned invalid response");
+        setIsSyncing(false);
+        return;
+      }
+
       if (!result.success || !result.data) throw new Error(result.message || 'Failed to load planner data');
       
       const data = result.data;
@@ -89,6 +97,13 @@ export default function StudyPlanner() {
       setLastUpdated(data.lastUpdated || new Date().toLocaleTimeString());
     } catch (error) {
       console.error('[Study Planner]: fetchPlannerData error', error);
+      setPlannerTasks([]);
+      setModules([]);
+      setQna([]);
+      setStats(null);
+      setLatestUpload(null);
+      // Prevent infinite UI error loop
+      return;
     } finally {
       setIsSyncing(false);
     }
@@ -99,11 +114,18 @@ export default function StudyPlanner() {
     fetchPlannerData();
 
     const supabase = getSupabasePublic();
+    let refreshTimeout: any;
+
+    const safeRefresh = () => {
+      clearTimeout(refreshTimeout);
+      refreshTimeout = setTimeout(fetchPlannerData, 800);
+    };
+
     const channel = supabase
       .channel('planner_realtime_v3')
-      .on('postgres_changes', { event: '*', table: 'planner', schema: 'public' }, () => fetchPlannerData())
-      .on('postgres_changes', { event: '*', table: 'uploads', schema: 'public' }, () => fetchPlannerData())
-      .on('postgres_changes', { event: '*', table: 'modules', schema: 'public' }, () => fetchPlannerData())
+      .on('postgres_changes', { event: '*', table: 'planner', schema: 'public' }, safeRefresh)
+      .on('postgres_changes', { event: '*', table: 'uploads', schema: 'public' }, safeRefresh)
+      .on('postgres_changes', { event: '*', table: 'modules', schema: 'public' }, safeRefresh)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -169,6 +191,14 @@ export default function StudyPlanner() {
   ];
 
   if (!hasMounted) return null; // Hydration defense
+
+  if (!plannerTasks && !modules && !qna) {
+    return (
+      <div className="text-center py-20 text-gray-500">
+        No planner data available yet. Upload documents first.
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
