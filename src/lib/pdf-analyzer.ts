@@ -1,5 +1,3 @@
-import axios from 'axios';
-
 // Standard Node.js text extraction with pdfjs-dist
 export interface AnalyzedContent {
   text: string;
@@ -11,16 +9,24 @@ export interface AnalyzedContent {
  */
 export async function downloadAndExtractPDF(url: string): Promise<AnalyzedContent> {
   try {
-    console.log(`[PDF Engine] Fetching content: ${url}`);
+    console.log(`[PDF Engine] Download URL: ${url}`);
     
-    // Robust download with axios
-    const response = await axios.get(url, {
-      responseType: 'arraybuffer',
-      timeout: 30000,
+    // Server-safe fetch bypassing serverless caching
+    const response = await fetch(url, {
+      cache: "no-store"
     });
 
-    const buffer = Buffer.from(response.data);
+    console.log(`[PDF Engine] Fetch Response Status: ${response.status}`);
+
+    if (!response.ok) {
+      throw new Error(`PDF fetch failed with status: ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
     
+    console.log(`[PDF Engine] File Size buffer length: ${buffer.length} bytes`);
+
     // Use pdfjs-dist for stable extraction
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
@@ -41,6 +47,8 @@ export async function downloadAndExtractPDF(url: string): Promise<AnalyzedConten
       .replace(/[ \t]+/g, ' ')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
+
+    console.log(`[PDF Engine] Parsing Result Length: ${cleanText.length} characters extracted`);
 
     if (cleanText.length < 20) {
       console.warn('[PDF Engine] Extracted text too short, using fallback.');
