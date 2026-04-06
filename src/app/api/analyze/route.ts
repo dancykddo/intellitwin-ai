@@ -44,24 +44,17 @@ export async function POST(req: Request) {
       console.log(`[PIPELINE] Phase 2 START: Intelligence Generation`);
       analysis = await analyzeText(parsed.text);
       
-      if (analysis.summary.includes('[Generated via Recovery Mode]')) {
-        pipelineStatus.ai = "failed (recovered)";
-        console.warn(`[PIPELINE] Phase 2 WARNING: AI using fallback profile.`);
+      if (analysis.summary.includes('[Fallback Mode')) {
+        pipelineStatus.ai = "failed (fallback)";
+        console.warn(`[PIPELINE] Phase 2 WARNING: AI processed a fallback PDF extraction.`);
       } else {
         pipelineStatus.ai = "success";
         console.log(`[PIPELINE] Phase 2 SUCCESS: AI analysis generated.`);
       }
     } catch (err: any) {
       pipelineStatus.ai = "failed (critical)";
-      console.error(`[PIPELINE] Phase 2 CRITICAL: ${err.message}`);
-      // Fallback analysis to prevent pipeline exit if AI genuinely fails
-      analysis = {
-        summary: "This study material is currently being indexed. [Manual Analysis Required]",
-        modules: [{
-          name: "Document Overview", topics: ["New Content"], difficulty: "Easy",
-          qna: [], planner_tasks: [{ task: "Review Document", topic: "General", priority: "Normal" }]
-        }]
-      };
+      console.error(`[PIPELINE] Phase 2 CRITICAL FAULT: ${err.message}`);
+      throw new Error(`AI Analysis Failed: ${err.message}`);
     }
 
     // --- PHASE 3: METADATA SYNC ---
